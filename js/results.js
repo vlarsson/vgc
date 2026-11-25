@@ -2,10 +2,10 @@
 (function () {
   const METHODS = [
     { key: "colmap", name: "COLMAP VGC", color: "#c9ced8" },
-    { key: "sweeney", name: "Sweeney et al.", color: "#9d86d6" },
-    { key: "geppert", name: "Geppert et al.", color: "#4fbfa0" },
-    { key: "fetzer", name: "Fetzer et al.", color: "#d6b44f" },
-    { key: "svd", name: "Ess. manifold (SVD)", color: "var(--scalar)" },
+    { key: "sweeney", name: "Sweeney et al.", color: "#9d86d6", url: "https://openaccess.thecvf.com/content_iccv_2015/html/Sweeney_Optimizing_the_Viewing_ICCV_2015_paper.html" },
+    { key: "geppert", name: "Geppert et al.", color: "#4fbfa0", url: "https://openaccess.thecvf.com/content/CVPR2021/html/Geppert_Privacy_Preserving_Localization_and_Mapping_From_Uncalibrated_Cameras_CVPR_2021_paper.html" },
+    { key: "fetzer", name: "Fetzer et al.", color: "#d6b44f", url: "https://openaccess.thecvf.com/content_WACV_2020/html/Fetzer_Stable_Intrinsic_Auto-Calibration_from_Fundamental_Matrices_of_Devices_with_Uncorrelated_WACV_2020_paper.html" },
+    { key: "svd", name: "Ess. manifold (SVD)", color: "var(--scalar)", url: "https://openaccess.thecvf.com/content/WACV2026/html/Solonets_Global_Focal_and_Radial_Distortion_Averaging_from_Radial_Fundamental_Matrices_WACV_2026_paper.html" },
     { key: "ours", name: "Ours", color: "var(--ours)" },
   ];
   // [median %, AUC@5, AUC@20, time s]
@@ -148,7 +148,7 @@
     let h = `<thead><tr><th>Method</th>${cols.map((c) => `<th>${c.label}</th>`).join("")}</tr></thead><tbody>`;
     for (const mt of METHODS) {
       const v = DATA[ds][mt.key];
-      h += `<tr class="${mt.key === "ours" ? "ours" : ""}"><td><span class="dot" style="background:${mt.color}"></span>${mt.name}</td>`;
+      h += `<tr class="${mt.key === "ours" ? "ours" : ""}"><td><span class="dot" style="background:${mt.color}"></span>${mt.url ? `<a href="${mt.url}">${mt.name}</a>` : mt.name}</td>`;
       cols.forEach((c, i) => {
         const s = v[c.idx].toFixed(c.d), r = ranks[i](v[c.idx]);
         h += `<td>${r ? `<${r}>${s}</${r}>` : s}</td>`;
