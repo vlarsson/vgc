@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smooth Essential-Manifold Residuals for View-Graph Calibration</title>
+<meta name="description" content="A smooth two-component residual for the essential-manifold distance: same objective, full-rank Gauss–Newton model, no per-edge SVD.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  try { const t = localStorage.getItem("vgc-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+
+<button id="theme-toggle" class="theme-toggle" aria-label="Toggle light/dark theme">
+  <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+  <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/></svg>
+</button>
+
+<header class="hero wrap">
+  <h1>Smooth Essential-Manifold Residuals<br>for View-Graph Calibration</h1>
+  <p class="authors">
+    <span>Viktor Larsson<sup>1</sup></span>
+    <span>Johannes Schönberger<sup>2</sup></span>
+  </p>
+  <p class="affils"><sup>1</sup>Lund University &nbsp;&nbsp; <sup>2</sup>Meta Reality Labs</p>
+  <nav class="links">
+    <a class="btn" href="https://arxiv.org/abs/2611.32540">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>
+      arXiv
+    </a>
+    <a class="btn" href="https://github.com/colmap/colmap">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.52-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.19-3.08-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.8 1.19 1.83 1.19 3.08 0 4.41-2.69 5.39-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5z"/></svg>
+      Code
+    </a>
+    <a class="btn" href="#bibtex">
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h3v6H6v-2.5M15 7h3v6h-4v-2.5"/></svg>
+      BibTeX
+    </a>
+  </nav>
+</header>
+
+<!-- ============ Abstract ============ -->
+<section class="wrap" id="abstract">
+  <h2>Abstract</h2>
+  <p>
+    View-graph calibration jointly estimates camera intrinsics from multiple pairwise fundamental matrices.
+    The correct intrinsics transform each fundamental matrix into an essential matrix, casting the calibration problem as minimizing the distance to the essential manifold.
+  </p>
+  <p>
+    We study how to represent this objective for nonlinear least squares.
+    The conventional singular-value formulation collapses two independent essential-matrix constraints into one scalar residual.
+    Its per-edge Gauss–Newton model is therefore rank deficient, which leads to poor convergence.
+  </p>
+  <p>
+    We instead derive an isometric reduction to 2×2 matrices, where each branch of the nonlinear essential-matrix constraint becomes a linear subspace.
+    This reduction yields a smooth two-dimensional residual whose squared norm is exactly the original manifold distance, whose Gauss–Newton approximation is generically full rank, and whose evaluation requires no per-edge singular value decomposition.
+    Experiments show that the new residual retains the estimation accuracy of the geometric objective while converging in fewer, computationally cheaper iterations.
+    Combined with robust initialization and optimization, it achieves state-of-the-art view-graph calibration accuracy at a runtime comparable to inexpensive algebraic objectives.
+  </p>
+</section>
+
+<!-- ============ Intro: view-graph calibration ============ -->
+<section class="wrap-wide" id="intro">
+  <div class="kicker">The problem</div>
+  <h2>View-graph calibration</h2>
+  <p class="intro-lead">Estimate the focal length of every image from the pairwise fundamental matrices of a view graph, before any camera poses or 3D points are recovered.</p>
+  <div class="flow">
+    <div class="flow-step">
+      <div class="card-num">Input</div>
+      <svg class="mini-graph" viewBox="0 0 200 92" aria-hidden="true">
+        <g class="mg-edges">
+          <line x1="22" y1="30" x2="84" y2="14"/><line x1="84" y1="14" x2="150" y2="26"/><line x1="150" y1="26" x2="180" y2="70"/>
+          <line x1="22" y1="30" x2="60" y2="76"/><line x1="60" y1="76" x2="120" y2="72"/><line x1="120" y1="72" x2="180" y2="70"/>
+          <line x1="84" y1="14" x2="120" y2="72"/><line x1="22" y1="30" x2="120" y2="72"/><line x1="150" y1="26" x2="120" y2="72"/>
+        </g>
+        <g class="mg-nodes">
+          <circle cx="22" cy="30" r="7"/><circle cx="84" cy="14" r="7"/><circle cx="150" cy="26" r="7"/>
+          <circle cx="180" cy="70" r="7"/><circle cx="120" cy="72" r="7"/><circle cx="60" cy="76" r="7"/>
+        </g>
+      </svg>
+      <p>Fundamental matrices <span class="math-inline">\(F_{ij}\)</span> between image pairs, forming a view graph.</p>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">→</div>
+    <div class="flow-step">
+      <div class="card-num">Constraint</div>
+      <div class="math-block">\[A_{ij} = K_j^\top F_{ij}\, K_i\]</div>
+      <p>For the correct focal lengths, <span class="math-inline">\(A_{ij}\)</span> is an essential matrix: its two non-zero singular values are equal.</p>
+    </div>
+    <div class="flow-arrow" aria-hidden="true">→</div>
+    <div class="flow-step">
+      <div class="card-num">Optimization</div>
+      <div class="math-block">\[\min_{\{f_i\}} \sum_{(i,j)} \rho\big(\ell(A_{ij})\big)\]</div>
+      <p>Minimize the distance <span class="math-inline">\(\ell\)</span> to the essential manifold over all edges, with a robust loss <span class="math-inline">\(\rho\)</span>. <strong>Output:</strong> a focal length <span class="math-inline">\(f_i\)</span> per image.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Essential-manifold distance ============ -->
+<section class="wrap-wide" id="distance">
+  <div class="kicker">The objective</div>
+  <h2>Distance to the essential manifold</h2>
+  <div class="dist">
+    <div class="dist-text">
+      <p>
+        A natural choice for <span class="math-inline">\(\ell\)</span> is the normalized distance from <span class="math-inline">\(A_{ij}\)</span> to the nearest essential matrix.
+        It measures geometric inconsistency directly and does not depend on the arbitrary scale of <span class="math-inline">\(F_{ij}\)</span>.
+      </p>
+      <p>
+        The simplest residual for least-squares solvers is the scalar <span class="math-inline">\(r=\sqrt{\ell}\)</span>, which requires an SVD per edge and packs the two essential-matrix constraints into a single number.
+      </p>
+      <p>
+        <strong>We reformulate the same distance as two smooth residuals</strong>, which give a better local model for Gauss–Newton optimization and do not require computing a 3×3 SVD in each iteration.
+      </p>
+    </div>
+    <div class="dist-eq">
+      <div class="math-block">\[
+        \ell(A)=\min_{E\in\mathcal{E}}\frac{\|A-E\|_F^2}{\|A\|_F^2}
+        =\frac{(\sigma_1-\sigma_2)^2}{2\,(\sigma_1^2+\sigma_2^2)}
+      \]</div>
+      <p class="dist-note">
+        <span class="math-inline">\(\mathcal{E}=\{U\operatorname{diag}(\alpha,\alpha,0)V^\top\}\)</span> is the essential manifold and
+        <span class="math-inline">\(\sigma_1\geq\sigma_2\)</span> are the non-zero singular values of <span class="math-inline">\(A\)</span>.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ Interactive teaser ============ -->
+<section class="wrap-wide" id="landscape">
+  <div class="widget">
+    <div class="widget-head">
+      <div>
+        <div class="kicker">Interactive</div>
+        <h2 class="widget-title">Same objective, different local models</h2>
+      </div>
+      <div class="widget-controls">
+        <button class="btn btn-solid" id="gn-run">
+          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor"><path d="M7 4.5v15l12-7.5z"/></svg>
+          Run LM
+        </button>
+        <button class="btn" id="gn-reset">Reset</button>
+      </div>
+    </div>
+    <div class="panels">
+      <div class="panel">
+        <div class="panel-label"><span class="swatch swatch-scalar"></span>Scalar residual <span class="math-inline">\(\sqrt{\ell}\)</span></div>
+        <div class="panel-iter" id="iter-scalar"></div>
+        <canvas id="canvas-scalar"></canvas>
+      </div>
+      <div class="panel">
+        <div class="panel-label"><span class="swatch swatch-ours"></span>Smooth 2×2 residual (ours)</div>
+        <div class="panel-iter" id="iter-ours"></div>
+        <canvas id="canvas-ours"></canvas>
+      </div>
+    </div>
+    <div class="widget-foot">
+      <p class="caption">
+        The shaded gray surface is the normalized essential-manifold cost of a single view-graph edge as its two focal lengths vary
+        (axes in units of the true focal lengths; the star marks the solution).
+        The colored surface is the Gauss–Newton model built at the current iterate, and <strong>Run</strong> takes Levenberg–Marquardt steps with a tiny fixed damping (λ = 10⁻⁶), needed because the scalar model is rank one.
+        The inset shows the same cost from above as level sets, with the model's level sets in color.
+        The scalar residual gives a rank-one model: an open trough with no unique minimum.
+        Our two-component residual gives a closed bowl that matches the cost.
+        <strong>Drag the dot</strong> (or click in the inset) to move the linearization point, drag elsewhere to rotate, or press <strong>Run</strong> to race the two solvers from the same start.
+      </p>
+      <div class="conv">
+        <svg id="conv-plot" viewBox="0 0 260 120" preserveAspectRatio="xMidYMid meet" aria-label="Convergence of both solvers"></svg>
+      </div>
+    </div>
+  </div>
+</section>
+
+<main class="wrap">
+
+<!-- ============ Method ============ -->
+<section id="method">
+  <h2>Reformulating the essential-manifold distance</h2>
+  <p class="lead">Keep the geometric objective, change how it is factored into residuals.</p>
+
+  <div class="cards">
+    <article class="card">
+      <div class="card-num">01</div>
+      <h3>Minimizing the essential-manifold distance</h3>
+      <p>
+        Nonlinear least-squares solvers such as Gauss–Newton or Levenberg–Marquardt minimize a sum of squared residuals,
+        <span class="math-inline">\(\sum_{(i,j)}\|r(A_{ij})\|^2\)</span>, by repeatedly linearizing each residual <span class="math-inline">\(r\)</span>.
+        To use the distance in such a solver, it must be written as a residual with <span class="math-inline">\(\|r(A)\|^2=\ell(A)\)</span>.
+        The natural choice is the scalar residual
+      </p>
+      <div class="math-block">\[
+        r(A)=\sqrt{\ell(A)}=\frac{\sigma_1-\sigma_2}{\sqrt{2\,(\sigma_1^2+\sigma_2^2)}}.
+      \]</div>
+      <p>This has several problems:</p>
+      <ul class="issues">
+        <li><strong>Non-differentiable at the solution.</strong> It behaves like an absolute value where <span class="math-inline">\(\sigma_1=\sigma_2\)</span>.</li>
+        <li><strong>One residual for a codimension-two constraint.</strong> Its Gauss–Newton model has rank one.</li>
+        <li><strong>Requires an SVD.</strong> A 3×3 SVD of <span class="math-inline">\(A\)</span> has to be computed in each iteration.</li>
+      </ul>
+    </article>
+    <article class="card">
+      <div class="card-num">02</div>
+      <h3>Isometric reduction to 2×2</h3>
+      <p>
+        Let <span class="math-inline">\(a\)</span> and <span class="math-inline">\(b\)</span> be unit left and right null vectors of the rank-2 matrix <span class="math-inline">\(A\)</span>,
+        so that <span class="math-inline">\(A^\top a=0\)</span> and <span class="math-inline">\(Ab=0\)</span>.
+        Let <span class="math-inline">\(P_a,P_b\in\mathbb{R}^{2\times 3}\)</span> have orthonormal rows spanning the complements
+        <span class="math-inline">\(a^\perp\)</span> and <span class="math-inline">\(b^\perp\)</span>.
+        Projecting onto them gives a 2×2 matrix <span class="math-inline">\(C = P_a A P_b^\top\)</span>.
+        Since <span class="math-inline">\(A = P_a^\top C P_b\)</span>, no component of <span class="math-inline">\(A\)</span> is lost.
+      </p>
+      <div class="matprod" aria-label="2x3 times 3x3 times 3x2 equals 2x2">
+        <div class="mat-col"><div class="mat m23"><i></i><i></i><i></i><i></i><i></i><i></i></div><span>\(P_a\)</span><em>2×3</em></div>
+        <div class="mat-op">·</div>
+        <div class="mat-col"><div class="mat m33 mat-e"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><span>\(A\)</span><em>3×3, rank 2</em></div>
+        <div class="mat-op">·</div>
+        <div class="mat-col"><div class="mat m32"><i></i><i></i><i></i><i></i><i></i><i></i></div><span>\(P_b^\top\)</span><em>3×2</em></div>
+        <div class="mat-op">=</div>
+        <div class="mat-col"><div class="mat m22 mat-o"><i></i><i></i><i></i><i></i></div><span>\(C\)</span><em>2×2</em></div>
+      </div>
+      <p>
+        Recall that the essential manifold
+        <span class="eq-e">\(\mathcal{E}=\{U\operatorname{diag}(\alpha,\alpha,0)V^\top:\ \alpha>0,\ U,V\in\mathrm{O}(3)\}\)</span>
+        consists of the rank-2 matrices with two equal singular values.
+      </p>
+      <p>
+        The key observation is now that <strong><span class="eq-e">\(\boldsymbol{A}\)</span> being an essential matrix is equivalent to <span class="eq-o">\(\boldsymbol{C}\)</span> being scaled orthogonal</strong>, i.e.:
+      </p>
+      <div class="equiv">
+        <span class="eq-e">\(A\in\mathcal{E}\)</span>
+        <span class="eq-iff">\(\Longleftrightarrow\)</span>
+        <span class="eq-o">\(C\in\{\alpha R:\ \alpha\geq 0,\ R\in\mathrm{O}(2)\}\)</span>
+      </div>
+      <p>Scaled <span class="math-inline">\(\mathrm{O}(2)\)</span> is the union of two orthogonal <em>linear</em> subspaces, the scaled rotations and the scaled reflections:</p>
+      <div class="math-block">\[
+        \mathcal{S}_+=\left\{\begin{bmatrix}\alpha&\beta\\-\beta&\alpha\end{bmatrix}\right\},\quad
+        \mathcal{S}_-=\left\{\begin{bmatrix}\alpha&\beta\\\beta&-\alpha\end{bmatrix}\right\}.
+      \]</div>
+    </article>
+    <article class="card">
+      <div class="card-num">03</div>
+      <h3>A smooth two-component residual</h3>
+      <p>The distance to the nearer subspace is a smooth 2-vector:</p>
+      <div class="math-block">\[
+        r_{ij}=\frac{1}{\sqrt{2}\,\|A_{ij}\|_F}
+        \begin{bmatrix} c_{11}-\eta\, c_{22}\\ c_{12}+\eta\, c_{21}\end{bmatrix}.
+      \]</div>
+      <p>
+        Here <span class="math-inline">\(\eta=\operatorname{sign}\det C\)</span> selects the nearer of the two subspaces.
+        Its squared norm is exactly the original distance, <span class="math-inline">\(\|r_{ij}\|^2=\ell(A_{ij})\)</span>, so the objective is unchanged.
+      </p>
+    </article>
+    <article class="card">
+      <div class="card-num">04</div>
+      <h3>Parameterizing the projections</h3>
+      <p>
+        The reduction needs the null spaces of <span class="math-inline">\(A_{ij}\)</span>, but these never have to be recomputed during optimization.
+        The null vectors <span class="math-inline">\(a_{ij},b_{ij}\)</span> of <span class="math-inline">\(F_{ij}\)</span> are computed once per edge,
+        and the null vectors of <span class="math-inline">\(A_{ij}\)</span> follow by transport through the current calibration:
+      </p>
+      <div class="math-block">\[
+        \hat a=\frac{K_j^{-1}a_{ij}}{\|K_j^{-1}a_{ij}\|},\qquad
+        \hat b=\frac{K_i^{-1}b_{ij}}{\|K_i^{-1}b_{ij}\|}.
+      \]</div>
+      <p>
+        Writing <span class="math-inline">\(a_{ij}=(a_1,a_2,a_3)^\top\)</span> and <span class="math-inline">\((u,v)\)</span> for the principal point,
+        <span class="math-inline">\(K_j^{-1}a_{ij}\propto(a_1-ua_3,\ a_2-va_3,\ f_j a_3)^\top\)</span>.
+        As <span class="math-inline">\(f_j\)</span> varies, <span class="math-inline">\(\hat a\)</span> stays in the fixed plane spanned by
+        <span class="math-inline">\(e_3\)</span> and <span class="math-inline">\(w=(a_1-ua_3,\ a_2-va_3,\ 0)^\top\)</span>.
+        The axis <span class="math-inline">\(n_a\propto w\times e_3\)</span> is therefore orthogonal to <span class="math-inline">\(\hat a\)</span> for every focal length, which gives the projection in closed form:
+      </p>
+      <div class="math-block">\[
+        P_a=\begin{bmatrix} n_a^\top\\ (\hat a\times n_a)^\top\end{bmatrix},
+      \]</div>
+      <p>
+        and likewise for <span class="math-inline">\(P_b\)</span>.
+        The projections vary smoothly with the focal lengths, and the branch <span class="math-inline">\(\eta\)</span> is fixed at initialization because
+        <span class="math-inline">\(|\det C|=\sigma_1\sigma_2>0\)</span> cannot change sign along an optimization path.
+        Every step is an elementary matrix expression: <strong>no SVD inside the solver loop</strong>.
+      </p>
+    </article>
+  </div>
+
+  <figure class="fig">
+    <div class="fig-paper"><img src="assets/figures/em_kink.svg" alt="Singular values swap order; scalar residual kinks while the two components cross zero smoothly." loading="lazy"></div>
+    <figcaption>
+      <strong>Why the scalar residual kinks.</strong>
+      Along a one-dimensional focal slice the two singular values meet and swap order (left), so their gap behaves like an absolute value.
+      The scalar residual kinks where the two signed 2×2 components vanish (middle) and its derivative jumps (right),
+      while the components themselves cross zero smoothly.
+    </figcaption>
+  </figure>
+</section>
+
+<!-- ============ Results ============ -->
+<section id="results">
+  <h2>Results</h2>
+  <p class="lead">Accuracy of the geometric objective, at the cost of the algebraic ones.</p>
+  <p>
+    Focal-length calibration on four benchmarks.
+    All methods share the same view graphs, and all but the COLMAP view-graph calibrator (COLMAP 4.2.0.dev0, commit <code>45b9eb19</code>, run as shipped) share our initialization and robust schedule.
+    Both essential-manifold formulations reach the highest accuracy; ours does so at a fraction of the SVD formulation's runtime.
+  </p>
+
+  <div class="widget results-widget">
+    <div class="results-controls">
+      <div class="seg" id="ds-tabs" role="tablist"></div>
+      <div class="seg seg-small" id="metric-tabs" role="tablist"></div>
+    </div>
+    <div class="results-body">
+      <div class="scatter-wrap">
+        <svg id="scatter" aria-label="Accuracy versus runtime"></svg>
+        <div class="tooltip" id="scatter-tip" hidden></div>
+      </div>
+      <div class="table-wrap">
+        <table class="rtable" id="results-table"></table>
+        <p class="note">Median relative focal error in %, AUC of the relative-error curve at 5% and 20%, mean end-to-end calibration time per scene in seconds. <b>Bold</b>: best, <u>underline</u>: second best.</p>
+      </div>
+    </div>
+  </div>
+
+  <h3>Faster convergence, cheaper iterations</h3>
+  <div class="split">
+    <figure class="fig">
+      <div class="fig-paper"><img src="assets/figures/em_convergence.svg" alt="Convergence on ETH3D Playground for SVD scalar, SVD-free scalar and ours." loading="lazy"></div>
+      <figcaption>
+        <strong>Convergence on ETH3D Playground</strong> (38 images, 226 edges) from the same initialization.
+        The SVD-free scalar only makes each iteration cheaper; the 2×2 residual also needs far fewer iterations.
+      </figcaption>
+    </figure>
+    <div class="costs">
+      <div class="costs-title">Per-edge evaluation cost <span>(single thread, median)</span></div>
+      <div class="cost-group">
+        <div class="cost-head">Residual</div>
+        <div class="cost-row"><span>SVD scalar</span><div class="bar"><i style="width:100%"></i></div><em>513 ns</em></div>
+        <div class="cost-row"><span>SVD-free scalar</span><div class="bar"><i style="width:11.1%"></i></div><em>57 ns</em></div>
+        <div class="cost-row ours"><span>2×2 (ours)</span><div class="bar"><i style="width:9.2%"></i></div><em>47 ns</em></div>
+      </div>
+      <div class="cost-group">
+        <div class="cost-head">Residual + Jacobian</div>
+        <div class="cost-row"><span>SVD scalar</span><div class="bar"><i style="width:100%"></i></div><em>548 ns</em></div>
+        <div class="cost-row"><span>SVD-free scalar</span><div class="bar"><i style="width:20.4%"></i></div><em>112 ns</em></div>
+        <div class="cost-row ours"><span>2×2 (ours)</span><div class="bar"><i style="width:14.8%"></i></div><em>81 ns</em></div>
+      </div>
+      <p class="note">Up to 10.9× faster residuals and 6.8× faster Jacobians than the SVD formulation. One-time per-edge setup excluded.</p>
+    </div>
+  </div>
+
+  <h3>Comparison to learned calibration</h3>
+  <p>
+    Learned single-view and multi-view models solve a different task from different inputs, but they are a natural point of reference.
+    Classical view-graph calibration with our residual remains the most accurate on every dataset.
+  </p>
+  <div class="table-scroll">
+    <table class="rtable wide">
+      <thead>
+        <tr><th></th><th colspan="3">ETH3D</th><th colspan="3">IMC2023</th><th colspan="3">IMC2024</th></tr>
+        <tr><th>Method</th><th>med.</th><th>@5%</th><th>@20%</th><th>med.</th><th>@5%</th><th>@20%</th><th>med.</th><th>@5%</th><th>@20%</th></tr>
+      </thead>
+      <tbody>
+        <tr class="group"><td colspan="10">Learned single-view</td></tr>
+        <tr><td>GeoCalib</td><td>7.81</td><td>0.203</td><td>0.527</td><td>10.23</td><td>0.148</td><td>0.452</td><td>29.63</td><td>0.055</td><td>0.194</td></tr>
+        <tr><td>AnyCalib</td><td>5.73</td><td>0.242</td><td>0.636</td><td>7.65</td><td>0.193</td><td>0.542</td><td>11.58</td><td>0.121</td><td>0.412</td></tr>
+        <tr class="group"><td colspan="10">Learned multi-view</td></tr>
+        <tr><td>VGGT-Ω</td><td><u>0.53</u></td><td><u>0.813</u></td><td><u>0.952</u></td><td><u>1.68</u></td><td><u>0.596</u></td><td><u>0.863</u></td><td>8.76</td><td>0.134</td><td><u>0.501</u></td></tr>
+        <tr><td>MapAnything</td><td>3.25</td><td>0.386</td><td>0.704</td><td>2.46</td><td>0.459</td><td>0.794</td><td>14.84</td><td>0.061</td><td>0.309</td></tr>
+        <tr class="group"><td colspan="10">View-graph calibration</td></tr>
+        <tr><td>COLMAP</td><td>0.78</td><td>0.618</td><td>0.762</td><td>2.17</td><td>0.485</td><td>0.790</td><td><u>7.42</u></td><td><u>0.229</u></td><td>0.490</td></tr>
+        <tr class="ours"><td>Ours</td><td><b>0.27</b></td><td><b>0.882</b></td><td><b>0.964</b></td><td><b>1.03</b></td><td><b>0.677</b></td><td><b>0.881</b></td><td><b>2.67</b></td><td><b>0.432</b></td><td><b>0.728</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ============ BibTeX ============ -->
+<section id="bibtex">
+  <h2>BibTeX</h2>
+  <div class="bib">
+    <button class="btn btn-copy" id="copy-bib">Copy</button>
+<pre id="bib-text">@article{larsson2026smooth,
+  title   = {Smooth Essential-Manifold Residuals for View-Graph Calibration},
+  author  = {Larsson, Viktor and Sch{\"o}nberger, Johannes},
+  journal = {arXiv preprint arXiv:2611.32540},
+  year    = {2026}
+}</pre>
+  </div>
+</section>
+
+</main>
+
+<footer class="wrap footer">
+  <p>The method will be available in <a href="https://github.com/colmap/colmap">COLMAP</a>.</p>
+</footer>
+
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+  onload="renderMathInElement(document.body,{delimiters:[{left:'\\[',right:'\\]',display:true},{left:'\\(',right:'\\)',display:false}]})"></script>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module" src="js/landscape.js"></script>
+<script src="js/results.js"></script>
+<script src="js/site.js"></script></body>
+</html>
